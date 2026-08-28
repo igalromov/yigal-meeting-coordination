@@ -109,13 +109,24 @@ h3 { font-size: clamp(18px, 2vw, 21px); }
 
 /* ---------- 4. Components ---------- */
 
-/* Skip link */
-.skip-link {
-  position: absolute; inset-inline-start: -9999px; top: 0;
-  background: var(--navy-800); color: #fff; padding: 12px 20px; z-index: 999;
-  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+/* Visually hidden — safe in RTL (no negative offsets that widen the page) */
+.visually-hidden {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px; border: 0;
+  overflow: hidden; white-space: nowrap;
+  clip: rect(0 0 0 0); clip-path: inset(50%);
 }
-.skip-link:focus { inset-inline-start: 12px; color: #fff; }
+
+/* Skip link — slides down into view on focus */
+.skip-link {
+  position: absolute; top: 0; inset-inline-start: 12px; z-index: 999;
+  background: var(--navy-800); color: #fff; padding: 12px 20px;
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  transform: translateY(-130%);
+  transition: transform .18s var(--ease);
+}
+.skip-link:focus { transform: none; color: #fff; }
 
 /* Buttons */
 .btn {
@@ -157,7 +168,7 @@ h3 { font-size: clamp(18px, 2vw, 21px); }
 .tick::after {
   content: ""; position: absolute; inset: 0; margin: auto;
   width: 5px; height: 9px; border: solid var(--gold-dark);
-  border-width: 0 0 2px 2px; transform: rotate(-45deg) translate(1px, -1px);
+  border-width: 0 2px 2px 0; transform: rotate(45deg) translate(-1px, -1px);
 }
 
 /* Header */
@@ -387,6 +398,7 @@ h3 { font-size: clamp(18px, 2vw, 21px); }
 
 /* ---------- 6. Forms ---------- */
 .form-wrap {
+  position: relative;
   background: #fff; border: 1px solid var(--line); border-radius: var(--radius-lg);
   padding: clamp(22px, 4vw, 40px); box-shadow: var(--shadow);
 }
@@ -487,8 +499,16 @@ input:focus, select:focus, textarea:focus {
   color: var(--danger); font-size: 14.5px; font-weight: 500;
 }
 
-/* Honeypot */
-.hp { position: absolute; inset-inline-start: -9999px; width: 1px; height: 1px; overflow: hidden; }
+/* Honeypot — hidden from people, still reachable by bots. Must not create
+   horizontal overflow, so no off-canvas offsets (they resolve to `right`
+   in RTL and widen the page). */
+.hp {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px; border: 0;
+  overflow: hidden; white-space: nowrap;
+  clip: rect(0 0 0 0); clip-path: inset(50%);
+}
 
 /* Success */
 .success { text-align: center; padding: clamp(24px, 4vw, 42px) 10px; }
