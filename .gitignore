@@ -1,0 +1,19 @@
+# System
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# Local / secrets
+.env
+.env.*
+*.local
+config.local.js
+
+# Dependencies & build output (not used today, kept for future)
+node_modules/
+dist/
