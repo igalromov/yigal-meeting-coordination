@@ -236,7 +236,9 @@
     });
 
     // ריכוז בחירות מרובות למחרוזת אחת קריאה (נוח לשורת גיליון)
-    if (Array.isArray(data.topics)) data.topics = data.topics.join(', ');
+    Object.keys(data).forEach(function (key) {
+      if (Array.isArray(data[key])) data[key] = data[key].join(', ');
+    });
 
     var consentEl = form.querySelector('[name="consent"]');
     if (consentEl) data.consent = consentEl.checked ? 'כן' : 'לא';
@@ -381,10 +383,214 @@
   }
 
   /* =======================================================
+     4) אשף השאלות — שאלה אחת בכל פעם
+     -------------------------------------------------------
+     כל השלבים נשארים ב-DOM ומוסתרים בעזרת [hidden], ולכן
+     FormData ממשיך לאסוף גם תשובות משלבים שאינם על המסך.
+     האשף כולו רשות: אפשר לדלג על שאלה בודדת או על כולן.
+     ======================================================= */
+  function initWizard() {
+    var root = $('#qWizard');
+    if (!root) return;
+
+    var track = $('#wizTrack', root);
+    var steps = $$('.wiz-step', track);
+    if (!steps.length) return;
+
+    var bar = $('#wizBar', root);
+    var progress = $('#wizProgress', root);
+    var count = $('#wizCount', root);
+    var done = $('#wizDone', root);
+    var summary = $('#wizSummary', root);
+    var nav = $('#wizNav', root);
+
+    var btn = {
+      prev: nav.querySelector('[data-wiz="prev"]'),
+      skip: nav.querySelector('[data-wiz="skip"]'),
+      all: nav.querySelector('[data-wiz="all"]'),
+      next: nav.querySelector('[data-wiz="next"]')
+    };
+
+    var total = steps.length;
+    var idx = 0;
+    var isDone = false;
+    var advanceTimer = null;
+
+    var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    /* כפתור חזרה לעריכה — נוצר כאן כי הוא רלוונטי רק כשיש JS */
+    var editBtn = document.createElement('button');
+    editBtn.type = 'button';
+    editBtn.className = 'wiz-link';
+    editBtn.textContent = 'חזרה לעריכת התשובות';
+    editBtn.addEventListener('click', function () { show(0, true); });
+    if (done) done.appendChild(editBtn);
+
+    /** טקסט השאלה, בלי תגית ה"רשות" שבתוכה */
+    function labelOf(step) {
+      var el = step.querySelector('.q-label');
+      if (!el) return '';
+      var clone = el.cloneNode(true);
+      var opt = clone.querySelector('.opt');
+      if (opt) opt.remove();
+      return clone.textContent.trim().replace(/\s+/g, ' ');
+    }
+
+    /** התשובה שנבחרה בשלב, או מחרוזת ריקה */
+    function answerOf(step) {
+      var checked = $$('input:checked', step).map(function (i) { return i.value; });
+      if (checked.length) return checked.join(', ');
+      var ta = step.querySelector('textarea');
+      return ta && ta.value.trim() ? ta.value.trim() : '';
+    }
+
+    function buildSummary() {
+      if (!summary) return;
+      summary.textContent = '';
+      var answered = 0;
+
+      steps.forEach(function (step) {
+        var value = answerOf(step);
+        if (!value) return;
+        answered++;
+        var row = document.createElement('div');
+        row.className = 'wiz-row';
+        var b = document.createElement('b');
+        b.textContent = labelOf(step);
+        var span = document.createElement('span');
+        span.textContent = value;
+        row.appendChild(b);
+        row.appendChild(span);
+        summary.appendChild(row);
+      });
+
+      if (!answered) {
+        var empty = document.createElement('p');
+        empty.className = 'wiz-summary-empty';
+        empty.textContent = 'דילגת על כל השאלות — זה בסדר גמור. נשמח לשמוע את הפרטים בשיחה עצמה.';
+        summary.appendChild(empty);
+      }
+    }
+
+    function setProgress(value) {
+      var pct = Math.round((value / total) * 100);
+      if (bar) bar.style.width = pct + '%';
+      if (progress) progress.setAttribute('aria-valuenow', String(value));
+    }
+
+    function showDone(focus) {
+      isDone = true;
+      steps.forEach(function (st) { st.hidden = true; });
+      buildSummary();
+      if (done) done.hidden = false;
+      if (count) count.textContent = 'סיימת את כל השאלות';
+      setProgress(total);
+
+      btn.prev.hidden = true;
+      btn.skip.hidden = true;
+      btn.all.hidden = true;
+      btn.next.hidden = true;
+
+      if (focus && done) { try { done.focus({ preventScroll: true }); } catch (e) { done.focus(); } }
+    }
+
+    function show(i, focus) {
+      if (advanceTimer) { clearTimeout(advanceTimer); advanceTimer = null; }
+
+      if (i >= total) { showDone(focus); return; }
+
+      isDone = false;
+      idx = Math.max(0, i);
+      if (done) done.hidden = true;
+
+      steps.forEach(function (st, n) { st.hidden = n !== idx; });
+
+      if (count) count.textContent = 'שאלה ' + (idx + 1) + ' מתוך ' + total;
+      setProgress(idx);
+
+      btn.prev.hidden = idx === 0;
+      btn.skip.hidden = false;
+      btn.all.hidden = false;
+      btn.next.hidden = false;
+      btn.next.textContent = idx === total - 1 ? 'סיום' : 'המשך';
+
+      if (focus) {
+        var step = steps[idx];
+        step.setAttribute('tabindex', '-1');
+        try { step.focus({ preventScroll: true }); } catch (e) { step.focus(); }
+      }
+    }
+
+    btn.prev.addEventListener('click', function () { show(idx - 1, true); });
+    btn.skip.addEventListener('click', function () { show(idx + 1, true); });
+    btn.next.addEventListener('click', function () { show(idx + 1, true); });
+    btn.all.addEventListener('click', function () { showDone(true); });
+
+    /* מעבר אוטומטי אחרי בחירה יחידה — עם השהיה קצרה כדי שהבחירה תיראה */
+    steps.forEach(function (step, n) {
+      if (step.getAttribute('data-advance') !== 'auto') return;
+      $$('input[type="radio"]', step).forEach(function (input) {
+        input.addEventListener('change', function () {
+          if (advanceTimer) clearTimeout(advanceTimer);
+          advanceTimer = setTimeout(function () {
+            if (idx === n && !isDone) show(n + 1, true);
+          }, reduceMotion ? 60 : 340);
+        });
+      });
+    });
+
+    /* Enter בתוך שלב מקדם, ולא שולח את הטופס בטעות */
+    track.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter') return;
+      if (e.target.tagName === 'TEXTAREA') return;
+      e.preventDefault();
+      show(idx + 1, true);
+    });
+
+    /* איפוס האשף כשהטופס מתאפס */
+    root.closest('form').addEventListener('reset', function () {
+      setTimeout(function () { show(0, false); }, 0);
+    });
+
+    show(0, false);
+  }
+
+  /* =======================================================
+     5) חשיפה הדרגתית בגלילה
+     ======================================================= */
+  function initReveal() {
+    var items = $$('.reveal');
+    if (!items.length) return;
+
+    if (!('IntersectionObserver' in window)) {
+      items.forEach(function (el) { el.classList.add('is-in'); });
+      return;
+    }
+
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        entry.target.classList.add('is-in');
+        io.unobserve(entry.target);
+      });
+    }, { rootMargin: '0px 0px -8% 0px', threshold: 0.12 });
+
+    // השהיה מדורגת בין פריטים סמוכים, לתחושת רצף
+    items.forEach(function (el) {
+      var parent = el.parentNode;
+      if (typeof parent.__revealSeq !== 'number') parent.__revealSeq = 0;
+      el.style.setProperty('--d', Math.min(parent.__revealSeq++, 5) * 70 + 'ms');
+      io.observe(el);
+    });
+  }
+
+  /* =======================================================
      אתחול
      ======================================================= */
   function init() {
     initUI();
+    initWizard();
+    initReveal();
 
     initForm({
       type: 'lead',
